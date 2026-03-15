@@ -25,10 +25,9 @@ env/
 .DS_Store
 Thumbs.db
 
-# Claude Code — keep CLAUDE.md and rules, skip local settings and memory
-.claude/settings.local.json
-.claude/plans/
-.claude/skills/
+# Claude Code — exclude all Claude files from the repo
+CLAUDE.md
+.claude/
 
 # Test artefacts
 .pytest_cache/
