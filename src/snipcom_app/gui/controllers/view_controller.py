@@ -159,14 +159,6 @@ class ViewController:
         window.apply_widget_zoom(title_label, 10)
         layout.addWidget(title_label)
 
-        secondary_text = window.secondary_text_for(entry)
-        if secondary_text:
-            subtitle_label = QLabel(secondary_text)
-            subtitle_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-            subtitle_label.setWordWrap(True)
-            subtitle_label.setStyleSheet("color: rgba(220, 226, 232, 0.76);")
-            window.apply_widget_zoom(subtitle_label, 8)
-            layout.addWidget(subtitle_label)
 
         if not entry.dangerous and entry_color:
             layout.setContentsMargins(
