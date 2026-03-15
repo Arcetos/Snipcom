@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Snipcom
+Comment=Manage command snippets and text files with launch, tag, and clipboard tools
+GenericName=Snipcom
+Exec=snipcom
+Icon=io.github.arcetos.Snipcom
+Terminal=false
+StartupNotify=true
+Categories=Utility;TextEditor;Qt;
+Keywords=snippet;command;text;notes;clipboard;launcher;

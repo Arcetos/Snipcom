@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.arcetos.Snipcom</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LicenseRef-proprietary</project_license>
+  <name>Snipcom</name>
+  <summary>Manage local command and text snippets in table or grid views</summary>
+  <description>
+    <p>
+      Snipcom is a desktop utility for organizing plain text files,
+      reusable commands, and quick clipboard-driven snippets in a single folder.
+    </p>
+    <p>
+      It includes table and grid views, search by title and content, tags,
+      clipboard paste and rewrite actions, launch controls for command files,
+      custom trash handling, and persistent interface preferences.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.arcetos.Snipcom.desktop</launchable>
+  <developer id="io.github.arcetos">
+    <name>arcetos</name>
+  </developer>
+  <categories>
+    <category>Utility</category>
+    <category>TextEditor</category>
+  </categories>
+  <provides>
+    <binary>snipcom</binary>
+    <binary>scm</binary>
+  </provides>
+  <releases>
+    <release version="0.1.0" date="2026-03-08"/>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>

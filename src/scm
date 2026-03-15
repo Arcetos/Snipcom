@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+#
+# Short alias launcher for Snipcom.
+#
+# Read this header first: this file is an alias for `snipcom` and forwards to
+# the same unified entrypoint that supports both GUI and CLI usage.
+
+from __future__ import annotations
+
+from snipcom_app.entrypoint import main
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+

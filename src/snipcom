@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+#
+# Lightweight launcher for the installed app.
+#
+# Read this header first: this script only forwards to the real package entry
+# point. If a new Codex session only needs to know how the executable starts,
+# reading this header is enough and it can stop here. Real startup logic lives
+# in `snipcom_app/entrypoint.py`. This is the canonical launcher name.
+
+from __future__ import annotations
+
+from snipcom_app.entrypoint import main
+
+if __name__ == "__main__":
+    raise SystemExit(main())
