@@ -2,7 +2,7 @@
 <component type="desktop-application">
   <id>io.github.arcetos.Snipcom</id>
   <metadata_license>CC0-1.0</metadata_license>
-  <project_license>LicenseRef-proprietary</project_license>
+  <project_license>LicenseRef-PolyForm-Noncommercial-1.0.0</project_license>
   <name>Snipcom</name>
   <summary>Manage local command and text snippets in table or grid views</summary>
   <description>

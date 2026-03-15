@@ -1,21 +1,15 @@
+"""Pure shared AI settings and query helpers.
+
+This module intentionally avoids UI/runtime dependencies so both GUI and CLI
+flows can reuse the same normalization and heuristics.
+"""
+
 from __future__ import annotations
 
 import re
-import shutil
 from collections.abc import Iterable, Mapping
 
 from .ai import DEFAULT_OLLAMA_ENDPOINT
-
-
-def _detect_native_package_manager() -> str:
-    """Return the primary package manager available on this system."""
-    for pm in ("apt", "pacman", "zypper", "dnf", "apk", "yum"):
-        if shutil.which(pm):
-            return pm
-    return "rpm"  # fallback: rpm is always present on RHEL/Fedora
-
-
-_NATIVE_PACKAGE_MANAGER: str = _detect_native_package_manager()
 
 
 def ai_enabled(settings: Mapping[str, object]) -> bool:
@@ -35,7 +29,6 @@ def ai_endpoint(settings: Mapping[str, object]) -> str:
 def ai_model(settings: Mapping[str, object]) -> str:
     value = str(settings.get("ai_model", "qwen2.5:7b")).strip()
     return value or "qwen2.5:7b"
-
 
 
 def ai_timeout_seconds(settings: Mapping[str, object]) -> int:
@@ -70,7 +63,7 @@ def primary_tool_for_ai(
     synonym_map = {
         "github": "git", "repo": "git", "repository": "git", "branch": "git", "commit": "git",
         "commits": "git", "merge": "git", "rebase": "git", "push": "git", "pull": "git",
-        "package": _NATIVE_PACKAGE_MANAGER, "packages": _NATIVE_PACKAGE_MANAGER, "installed": _NATIVE_PACKAGE_MANAGER, "service": "systemctl",
+        "package": "rpm", "packages": "rpm", "installed": "rpm", "service": "systemctl",
         "services": "systemctl", "journal": "journalctl", "logs": "journalctl",
     }
     known_families = {

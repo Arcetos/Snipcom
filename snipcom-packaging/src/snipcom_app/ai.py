@@ -1,3 +1,20 @@
+"""Local AI provider and normalization layer.
+
+Read this header first: keep reading here only when the change is about Ollama,
+provider calls, prompt sanitation, or raw AI request/response handling.
+Workflow-specific AI behavior lives elsewhere.
+
+This file owns:
+- provider connectivity checks
+- request/response normalization
+- low-level prompt helpers
+
+Related files:
+- `ai_controller.py`: app-specific AI behavior, ranking, and context building
+- `terminal_controller.py`: terminal-side AI trigger flow
+- `search_controller.py`: quick-search AI trigger flow
+"""
+
 from __future__ import annotations
 
 import json
@@ -23,8 +40,6 @@ class AISuggestionContext:
     primary_tool: str
     recent_searches: tuple[str, ...]
     related_commands: tuple[str, ...]
-    current_directory: str = ""
-    directory_files: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -42,7 +57,6 @@ class AISuggestionResult:
     raw_text: str
     used_context: dict[str, Any]
     confidence_low: bool = False
-    description: str = ""
 
 
 def normalize_endpoint(endpoint: str) -> str:
@@ -100,100 +114,123 @@ def check_ollama_status(endpoint: str, model: str, *, timeout: int = 10) -> AICo
 
 def build_generation_prompt(context: AISuggestionContext) -> str:
     request_overrides_terminal = user_request_overrides_terminal_context(context)
-    parts = ["One Linux shell command. No prose, no markdown, no placeholders. Compound commands (&&, |, ;) ok. Don't repeat last command."]
-    if context.primary_tool.strip():
-        parts.append(f"Tool: {context.primary_tool.strip()}")
-    if context.user_request.strip():
-        parts.append(f"Task: {context.user_request.strip()}")
-    last_input = context.last_terminal_input.strip()
-    if last_input:
-        prefix = "(new topic) " if request_overrides_terminal else ""
-        parts.append(f"Last: {prefix}{last_input[:80]}")
-    if context.last_terminal_output.strip():
-        out = context.last_terminal_output.strip()[:300]
-        parts.append(f"Output: {out}")
-    if context.current_directory.strip():
-        parts.append(f"Dir: {context.current_directory.strip()}")
-    related = [c.strip() for c in context.related_commands[:2] if c.strip()]
-    if related:
-        parts.append("Ref: " + " | ".join(c[:60] for c in related))
-    parts.append("Command:")
-    return "\n".join(parts)
-
-
-def build_generation_prompt_multi(context: AISuggestionContext, n: int = 3) -> str:
-    """Like build_generation_prompt but requests N diverse commands with descriptions."""
     sections = [
-        f"Output exactly {n} Linux shell commands.",
-        "Format each line as:  COMMAND ## short description",
-        "Example:  rpm -qa ## lists all installed RPM packages with name and version",
-        "Rules: no markdown, no code fences, no line numbers, no placeholders like <name>.",
-        "Pipelines (|) and sequences (&&, ;) are fine inside the command part.",
-        "Keep descriptions under 10 words. One line per command, nothing else.",
+        "You generate exactly one likely next shell command.",
+        "Target environment: Fedora Linux shell.",
+        "Return only the command.",
+        "Do not return explanations, bullets, markdown, or code fences.",
+        "Do not wrap the command in apostrophes, quotation marks, or backticks unless they are required as part of the command itself.",
+        "Do not use placeholders such as /path/to/..., <name>, filename, your_repo, example, or toplevel_directory.",
+        "If you do not know an exact path or value, choose a concrete discovery command instead of inventing a placeholder.",
+        "The command must be executable as written right now.",
+        "Prefer a safe inspection or navigation command unless the user explicitly asks for something destructive.",
+        "If there is terminal context, use it to infer the most likely next step.",
+        "Stay in the same tool family as the last terminal input unless the user request clearly changes topic.",
+        "Do not repeat the last terminal command exactly.",
+        "Do not return a minor flag or formatting variation of the last terminal command unless the user explicitly asks for that.",
+        "If the user request is generic or short, infer a useful next inspection step from the last command and its output.",
     ]
-    if n > 1:
-        sections.append(f"Make the {n} commands diverse — different approaches or related use cases.")
     if context.primary_tool.strip():
-        sections.extend(["", f"Tool family: {context.primary_tool.strip()}"])
+        sections.extend(["", "Current tool family anchor:", context.primary_tool.strip()])
     if context.user_request.strip():
-        sections.extend(["", f"Task: {context.user_request.strip()}"])
+        sections.extend(["", "User request:", context.user_request.strip()])
     if context.last_terminal_input.strip():
-        sections.extend(["", f"Last input: {context.last_terminal_input.strip()}"])
-    if context.current_directory.strip():
-        sections.extend(["", f"Dir: {context.current_directory.strip()}"])
+        sections.extend(["", "Last terminal input:", context.last_terminal_input.strip()])
+        lowered_last_input = context.last_terminal_input.strip().casefold()
+        if request_overrides_terminal:
+            sections.extend(
+                [
+                    "",
+                    "The user request changes topic from the last terminal command.",
+                    "Follow the user request rather than the previous terminal family.",
+                ]
+            )
+        elif lowered_last_input == "rpm -qa":
+            sections.extend(
+                [
+                    "",
+                    "Special rule for 'rpm -qa': prefer a useful follow-up like 'rpm -qi <real package from output>' or 'rpm -qa | less'.",
+                    "Do not jump to unrelated rpm subcommands unless the user asked for that.",
+                ]
+            )
+        elif lowered_last_input == "ls":
+            sections.extend(
+                [
+                    "",
+                    "Special rule for bare 'ls': do not suggest another ls variant.",
+                    "Prefer a different concrete follow-up such as 'pwd' or another non-trivial inspection command.",
+                ]
+            )
+    if context.last_terminal_output.strip():
+        trimmed_output = context.last_terminal_output.strip()
+        if len(trimmed_output) > 3000:
+            trimmed_output = trimmed_output[:3000].rstrip() + "\n[truncated]"
+        sections.extend(["", "Last terminal output:", trimmed_output])
+    if context.recent_searches:
+        sections.extend(["", "Recent app searches:"])
+        sections.extend(f"- {query}" for query in context.recent_searches if query.strip())
     if context.related_commands:
-        related = [c.strip() for c in context.related_commands[:3] if c.strip()]
-        if related:
-            sections.extend(["", "Ref: " + " | ".join(related)])
-    sections.extend(["", f"Output {n} lines in COMMAND ## description format:"])
+        sections.extend(["", "Related commands seen in the app database:"])
+        sections.extend(f"- {command}" for command in context.related_commands if command.strip())
+    sections.extend(["", "Output:", "One shell command only."])
     return "\n".join(sections)
 
 
 def build_repair_prompt(context: AISuggestionContext, rejected_command: str) -> str:
     sections = [
-        f"Rejected (contained placeholders): {rejected_command}",
-        "Output one concrete Linux shell command. No placeholders, no angle brackets, no prose.",
-        "If unsure of a path, return a discovery command instead.",
+        "Your previous answer was not acceptable because it used placeholders or a non-concrete command.",
+        f"Rejected answer: {rejected_command}",
+        "Generate exactly one real shell command for Fedora Linux.",
+        "Return only the command.",
+        "Do not wrap the command in apostrophes, quotation marks, or backticks unless they are required as part of the command itself.",
+        "No placeholders, no angle brackets, no example paths, no prose.",
+        "If you do not know an exact path, return a concrete discovery command that helps the user find it.",
     ]
     if context.user_request.strip():
         sections.extend(["", "User request:", context.user_request.strip()])
     if context.primary_tool.strip():
-        sections.extend(["", "Tool family:", context.primary_tool.strip()])
+        sections.extend(["", "Current tool family anchor:", context.primary_tool.strip()])
     if context.last_terminal_input.strip():
-        sections.extend(["", "Last input:", context.last_terminal_input.strip()])
+        sections.extend(["", "Last terminal input:", context.last_terminal_input.strip()])
     if context.last_terminal_output.strip():
         trimmed_output = context.last_terminal_output.strip()
-        if len(trimmed_output) > 800:
-            trimmed_output = trimmed_output[:800].rstrip() + "\n[truncated]"
-        sections.extend(["", "Last output:", trimmed_output])
+        if len(trimmed_output) > 2000:
+            trimmed_output = trimmed_output[:2000].rstrip() + "\n[truncated]"
+        sections.extend(["", "Last terminal output:", trimmed_output])
     if context.related_commands:
-        sections.extend(["", "Related:"])
-        sections.extend(f"- {command}" for command in context.related_commands[:4] if command.strip())
-    sections.extend(["", "Command:"])
+        sections.extend(["", "Related commands:"])
+        sections.extend(f"- {command}" for command in context.related_commands[:6] if command.strip())
+    sections.extend(["", "Output:", "One executable shell command only."])
     return "\n".join(sections)
 
 
 def build_repeat_repair_prompt(context: AISuggestionContext, rejected_command: str) -> str:
     sections = [
-        f"Rejected (too similar to last command): {rejected_command}",
-        "Output one different Linux shell command — a concrete next inspection, filter, or navigation step.",
-        "Do not repeat or trivially vary the last command.",
+        "Your previous answer was not acceptable because it repeated the last terminal command or only made a trivial variation.",
+        f"Rejected answer: {rejected_command}",
+        "Generate exactly one different Fedora Linux shell command.",
+        "Return only the command.",
+        "Do not wrap the command in apostrophes, quotation marks, or backticks unless they are required as part of the command itself.",
+        "Do not repeat the last command.",
+        "Do not make a minor flag-order or formatting change to the last command.",
+        "Choose a concrete next inspection, filtering, navigation, or detail command that naturally follows from the context.",
+        "If the last command produced a long list, prefer a useful follow-up such as narrowing, paging, or inspecting one likely next item.",
     ]
     if context.user_request.strip():
         sections.extend(["", "User request:", context.user_request.strip()])
     if context.primary_tool.strip():
-        sections.extend(["", "Tool family:", context.primary_tool.strip()])
+        sections.extend(["", "Current tool family anchor:", context.primary_tool.strip()])
     if context.last_terminal_input.strip():
-        sections.extend(["", "Last input:", context.last_terminal_input.strip()])
+        sections.extend(["", "Last terminal input:", context.last_terminal_input.strip()])
     if context.last_terminal_output.strip():
         trimmed_output = context.last_terminal_output.strip()
-        if len(trimmed_output) > 800:
-            trimmed_output = trimmed_output[:800].rstrip() + "\n[truncated]"
-        sections.extend(["", "Last output:", trimmed_output])
+        if len(trimmed_output) > 2000:
+            trimmed_output = trimmed_output[:2000].rstrip() + "\n[truncated]"
+        sections.extend(["", "Last terminal output:", trimmed_output])
     if context.related_commands:
-        sections.extend(["", "Related:"])
-        sections.extend(f"- {command}" for command in context.related_commands[:4] if command.strip())
-    sections.extend(["", "Command:"])
+        sections.extend(["", "Related commands:"])
+        sections.extend(f"- {command}" for command in context.related_commands[:6] if command.strip())
+    sections.extend(["", "Output:", "One executable shell command only."])
     return "\n".join(sections)
 
 
@@ -232,8 +269,10 @@ def sanitize_generated_command(raw_text: str) -> tuple[str, bool]:
 
 def has_obvious_placeholder(command: str) -> bool:
     lowered = command.casefold()
-    plain_markers = (
+    placeholder_markers = (
         "/path/to",
+        "<",
+        ">",
         "filename",
         "example",
         "your_repo",
@@ -241,11 +280,7 @@ def has_obvious_placeholder(command: str) -> bool:
         "your-directory",
         "your_file",
     )
-    if any(marker in lowered for marker in plain_markers):
-        return True
-    # Angle-bracket placeholders like <username> or <branch-name>,
-    # but not shell redirections like > file or 2>&1.
-    return bool(re.search(r"<[a-zA-Z][a-zA-Z0-9_-]+>", command))
+    return any(marker in lowered for marker in placeholder_markers)
 
 
 def _normalized_command_tokens(command: str) -> list[str]:
@@ -345,44 +380,12 @@ def is_unhelpful_for_context(command: str, context: AISuggestionContext) -> bool
     return False
 
 
-def _detect_project_type(directory_files: tuple[str, ...]) -> str:
-    """Return a broad project-type label inferred from directory file names."""
-    names = {name.casefold().rstrip("/") for name in directory_files}
-    if "cargo.toml" in names:
-        return "rust"
-    if "pyproject.toml" in names or "setup.py" in names or "setup.cfg" in names:
-        return "python"
-    if "package.json" in names:
-        return "node"
-    if "go.mod" in names:
-        return "go"
-    if "pom.xml" in names or "build.gradle" in names or "build.gradle.kts" in names:
-        return "java"
-    if "makefile" in names or "gnumakefile" in names:
-        return "make"
-    if ".git/" in {name.casefold() for name in directory_files}:
-        return "git"
-    return ""
-
-
 def deterministic_fallback_command(context: AISuggestionContext) -> str:
     if user_request_overrides_terminal_context(context):
         return ""
     last_input = context.last_terminal_input.strip()
     lowered_last_input = last_input.casefold()
     if not last_input:
-        if context.directory_files:
-            project_type = _detect_project_type(context.directory_files)
-            if project_type == "git":
-                return "git status"
-            if project_type == "rust":
-                return "cargo build"
-            if project_type == "python":
-                return "python -m pytest"
-            if project_type == "node":
-                return "npm test"
-            if project_type == "go":
-                return "go build ./..."
         return ""
     if lowered_last_input == "rpm -qa":
         candidate = _extract_last_nonempty_line(context.last_terminal_output)
@@ -410,7 +413,6 @@ def _generate_ollama_text(
         "model": model.strip(),
         "prompt": prompt,
         "stream": False,
-        "keep_alive": "30m",
         "options": {
             "temperature": 0.2,
         },
@@ -483,72 +485,6 @@ def generate_ollama_command(
             "primary_tool": context.primary_tool,
             "recent_searches": list(context.recent_searches),
             "related_commands": list(context.related_commands),
-            "current_directory": context.current_directory,
-            "directory_files": list(context.directory_files),
         },
         confidence_low=confidence_low,
     )
-
-
-def generate_ollama_commands_multi(
-    endpoint: str,
-    model: str,
-    context: AISuggestionContext,
-    *,
-    n: int = 5,
-    timeout: int = 35,
-) -> list[AISuggestionResult]:
-    """Generate up to n diverse AI command suggestions in a single Ollama call."""
-    normalized_endpoint = normalize_endpoint(endpoint)
-    payload = {
-        "model": model.strip(),
-        "prompt": build_generation_prompt_multi(context, n),
-        "stream": False,
-        "keep_alive": "30m",
-        "options": {
-            "temperature": 0.5,
-        },
-    }
-    try:
-        response_payload = _json_request(f"{normalized_endpoint}/api/generate", payload, timeout=timeout)
-    except AIProviderError:
-        raise
-    raw_text = str(response_payload.get("response", "")).strip()
-    results: list[AISuggestionResult] = []
-    seen: set[str] = set()
-    for raw_line in raw_text.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        # Strip common numbering: "1. cmd", "1) cmd", "- cmd"
-        line = re.sub(r"^\d+[.)]\s+", "", line)
-        line = re.sub(r"^[-*]\s+", "", line)
-        # Split "COMMAND ## description"
-        if " ## " in line:
-            command_part, _, description_part = line.partition(" ## ")
-            description_part = description_part.strip()
-        else:
-            command_part = line
-            description_part = ""
-        command, confidence_low = sanitize_generated_command(command_part)
-        if not command or has_obvious_placeholder(command):
-            continue
-        if command in seen:
-            continue
-        seen.add(command)
-        results.append(AISuggestionResult(
-            command=command,
-            provider="ollama",
-            model=model.strip(),
-            raw_text=line,
-            used_context={
-                "user_request": context.user_request,
-                "last_terminal_input": context.last_terminal_input,
-                "primary_tool": context.primary_tool,
-            },
-            confidence_low=confidence_low,
-            description=description_part,
-        ))
-        if len(results) >= n:
-            break
-    return results

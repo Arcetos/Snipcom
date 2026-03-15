@@ -88,6 +88,7 @@ def _synthetic_entry(
     snip_type: str = "family_command",
     family_key: str = "",
     source_kind: str = "",
+    description: str = "",
 ) -> SnipcomEntry:
     return SnipcomEntry(
         entry_id=entry_id,
@@ -101,6 +102,7 @@ def _synthetic_entry(
         dangerous=False,
         family_key=family_key,
         source_kind=source_kind,
+        description=description,
     )
 
 
@@ -146,7 +148,7 @@ def _ai_anchor_terms(*values: str) -> list[str]:
 
 def _primary_tool_for_ai(ctx: CliContext, last_terminal_input: str, user_request: str) -> str:
     return primary_tool_for_ai(
-        ctx.repository.catalog_entries(include_active_commands=True),
+        ctx.cached_catalog_entries(),
         last_terminal_input,
         user_request,
     )
@@ -195,7 +197,7 @@ def _collect_related_commands_for_ai(
     token_terms = _ai_anchor_terms(*query_terms[:3])
     for query in query_terms[:3]:
         lowered_query = query.casefold()
-        for entry in ctx.repository.catalog_entries(include_active_commands=True):
+        for entry in ctx.cached_catalog_entries():
             if not entry.is_command or entry.command_id is None or entry.command_id in seen_ids:
                 continue
             entry_name = entry.display_name.casefold()
@@ -306,7 +308,9 @@ def _candidate_return_text(candidate: NavigatorCandidate) -> str:
 
 def _candidate_description_text(candidate: NavigatorCandidate, descriptions: dict[str, str]) -> str:
     entry = candidate.entry
-    if entry.is_command:
+    if entry.backend == "synthetic":
+        desc = entry.description.strip()
+    elif entry.is_command:
         desc = entry.description.strip()
     else:
         # descriptions.json is keyed by storage_key (e.g. "cla.txt"), not entry_id ("file:cla.txt")

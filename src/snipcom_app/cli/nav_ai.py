@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 
-from ..ai.ai import AIProviderError, generate_ollama_commands_multi
+from ..ai.ai import AIProviderError, generate_ollama_command, generate_ollama_commands_multi
 from .cli_context import CliContext
 from .nav_providers import (
     NavigatorAIState,
@@ -18,7 +18,48 @@ from .nav_providers import (
 )
 
 
-def _generate_cli_ai_candidates(ctx: CliContext, request_text: str, n: int = 5) -> tuple[list[NavigatorCandidate], str]:
+def _generate_cli_ai_candidate(ctx: CliContext, request_text: str) -> tuple[NavigatorCandidate | None, str]:
+    """Single fast command — used by the TUI nav and by cli_handlers_advanced nat."""
+    cleaned_request = request_text.strip()
+    if not cleaned_request:
+        return None, ""
+    if not _ai_enabled(ctx):
+        return None, "AI is disabled. Enable it in Settings > Options > AI."
+    if _ai_provider(ctx) != "ollama":
+        return None, f"Unsupported AI provider: {_ai_provider(ctx)}"
+    try:
+        context = _build_cli_ai_context(ctx, cleaned_request)
+        suggestion = generate_ollama_command(
+            _ai_endpoint(ctx),
+            _ai_model(ctx),
+            context,
+            timeout=_ai_timeout_seconds(ctx),
+        )
+    except (AIProviderError, KeyError, OSError, ValueError) as exc:
+        return None, str(exc)
+    command = suggestion.command.strip()
+    if not command:
+        return None, "The model did not return a usable command."
+    candidate = NavigatorCandidate(
+        entry=_synthetic_entry(
+            command,
+            entry_id=f"synthetic:ai:{abs(hash((cleaned_request.casefold(), command)))}",
+            snip_type="family_command",
+            family_key=context.primary_tool or "ai",
+            source_kind=suggestion.provider,
+            description=suggestion.description or cleaned_request,
+        ),
+        source_label="ai",
+        source_rank=2,
+        score=100,
+        reason=f"AI via {suggestion.model}",
+        body=command,
+    )
+    return candidate, ""
+
+
+def _generate_cli_ai_candidates(ctx: CliContext, request_text: str, n: int = 3) -> tuple[list[NavigatorCandidate], str]:
+    """Multi-result version for scm nat (n=3 by default)."""
     cleaned_request = request_text.strip()
     if not cleaned_request:
         return [], ""
@@ -51,6 +92,7 @@ def _generate_cli_ai_candidates(ctx: CliContext, request_text: str, n: int = 5) 
                 snip_type="family_command",
                 family_key=context.primary_tool or "ai",
                 source_kind=suggestion.provider,
+                description=suggestion.description or cleaned_request,
             ),
             source_label="ai",
             source_rank=2,
@@ -59,12 +101,6 @@ def _generate_cli_ai_candidates(ctx: CliContext, request_text: str, n: int = 5) 
             body=command,
         ))
     return candidates, ""
-
-
-def _generate_cli_ai_candidate(ctx: CliContext, request_text: str) -> tuple[NavigatorCandidate | None, str]:
-    """Single-result version kept for use by cli_handlers_advanced.py nat command."""
-    candidates, error = _generate_cli_ai_candidates(ctx, request_text, n=1)
-    return (candidates[0] if candidates else None), error
 
 
 def _clear_ai_state(ai_state: NavigatorAIState) -> None:

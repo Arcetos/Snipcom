@@ -20,9 +20,9 @@ class MainWindowPresentationMixin:
         self.show_toast(message, timeout_ms=timeout_ms)
 
     def style_terminal_toolbar(self: "NoteCopyPaster") -> None:
-        radius = self.scaled_size(10)
-        padding_v = self.scaled_size(7)
-        padding_h = self.scaled_size(10)
+        radius = 10
+        padding_v = 7
+        padding_h = 10
         self.terminal_toolbar_widget.setObjectName("terminal-toolbar")
         self.terminal_toolbar_widget.setStyleSheet(
             "#terminal-toolbar {"
@@ -289,17 +289,19 @@ class MainWindowPresentationMixin:
         font.setPointSize(max(7, self.scaled_size(base_point_size)))
         widget.setFont(font)
 
+    def apply_fixed_font(self: "NoteCopyPaster", widget: QWidget, point_size: int) -> None:
+        font = widget.font()
+        font.setPointSize(max(7, point_size))
+        widget.setFont(font)
+
     def style_grid_sort_controls(self: "NoteCopyPaster") -> None:
-        vertical_padding = self.scaled_size(6)
-        horizontal_padding = self.scaled_size(14)
-        min_height = self.scaled_size(34)
         for button in self.grid_sort_buttons.values():
-            button.setStyleSheet(f"padding: {vertical_padding}px {horizontal_padding}px;")
-            button.setMinimumHeight(min_height)
+            button.setStyleSheet("padding: 6px 14px;")
+            button.setMinimumHeight(34)
             button.adjustSize()
 
-        self.grid_tag_filter_button.setStyleSheet(f"padding: {vertical_padding}px {horizontal_padding}px;")
-        self.grid_tag_filter_button.setMinimumHeight(min_height)
+        self.grid_tag_filter_button.setStyleSheet("padding: 6px 14px;")
+        self.grid_tag_filter_button.setMinimumHeight(34)
         self.grid_tag_filter_button.adjustSize()
 
     def style_action_button(self: "NoteCopyPaster", widget: QWidget, compact: bool = False) -> None:

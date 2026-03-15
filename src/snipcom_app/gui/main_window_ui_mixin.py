@@ -180,7 +180,8 @@ class MainWindowUiMixin:
         self.zoom_slider.blockSignals(False)
 
     def apply_zoom(self: "NoteCopyPaster") -> None:
-        for widget, base_size in (
+        # Top bar and bottom bar: fixed size, unaffected by zoom
+        for widget, size in (
             (self.new_button, 11),
             (self.new_folder_button, 11),
             (self.open_folder_button, 11),
@@ -194,16 +195,23 @@ class MainWindowUiMixin:
             (self.status_label, 10),
             (self.grid_tag_filter_button, 10),
         ):
-            self.apply_widget_zoom(widget, base_size)
+            self.apply_fixed_font(widget, size)
 
-        self.view_toggle_button.setIconSize(QSize(self.scaled_size(18), self.scaled_size(18)))
-        self.background_button.setIconSize(QSize(self.scaled_size(18), self.scaled_size(18)))
+        self.view_toggle_button.setIconSize(QSize(18, 18))
+        self.background_button.setIconSize(QSize(18, 18))
         self.zoom_slider.setFixedWidth(140)
 
         for button in self.grid_sort_buttons.values():
-            self.apply_widget_zoom(button, 10)
+            self.apply_fixed_font(button, 10)
         self.style_grid_sort_controls()
 
+        # Terminal toolbar: fixed size
+        self.apply_fixed_font(self.terminal_selector_button, 10)
+        self.apply_fixed_font(self.terminal_command_input, 10)
+        self.apply_fixed_font(self.terminal_ai_suggestion_label, 9)
+        self.style_terminal_toolbar()
+
+        # Content area: scales with zoom
         self.apply_widget_zoom(self.table, 11)
         self.apply_widget_zoom(self.table.horizontalHeader(), 11)
         self.apply_widget_zoom(self.title_results, 12)
@@ -213,13 +221,9 @@ class MainWindowUiMixin:
         self.apply_widget_zoom(self.title_group, 12)
         self.apply_widget_zoom(self.content_group, 12)
         self.apply_widget_zoom(self.command_group, 12)
-        self.apply_widget_zoom(self.terminal_selector_button, 10)
-        self.apply_widget_zoom(self.terminal_command_input, 10)
-        self.apply_widget_zoom(self.terminal_ai_suggestion_label, 9)
         overlay_font = self.terminal_ai_overlay.font()
         overlay_font.setPointSize(max(14, self.scaled_size(18)))
         self.terminal_ai_overlay.setFont(overlay_font)
-        self.style_terminal_toolbar()
         self.table.verticalHeader().setMinimumSectionSize(self.scaled_size(46))
         self.table.resizeRowsToContents()
         self.view_controller.normalize_row_heights()

@@ -39,6 +39,9 @@ class ViewController:
         self.window = window
 
     def auto_refresh(self) -> None:
+        from PyQt6.QtWidgets import QApplication
+        if QApplication.activePopupWidget() is not None:
+            return
         window = self.window
         scrollbar = window.table.verticalScrollBar()
         scroll_pos = scrollbar.value()

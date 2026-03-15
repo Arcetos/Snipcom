@@ -176,4 +176,6 @@ See `ARCHITECTURE.md` for a full map of the codebase.
 
 ## License
 
-See `flatpak/io.github.arcetos.Snipcom.metainfo.xml` for project license information.
+[PolyForm Noncommercial License 1.0.0](LICENSE)
+
+Free to use for personal and non-commercial purposes. Redistribution and commercial use are not permitted without explicit written permission from the author.
