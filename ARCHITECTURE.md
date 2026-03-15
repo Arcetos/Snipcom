@@ -1,8 +1,8 @@
 # Snipcom Architecture
 
 ## Purpose
-This document is the fastest way to re-enter the project and know where to edit
-without re-reading the whole codebase.
+This document is the fastest way to understand the project and know where to edit
+without reading the whole codebase.
 
 The application has two first-class surfaces:
 - the main workflow window for active text files and family commands
