@@ -170,26 +170,6 @@ Click **Open Terminal** in the bottom-left of the main window. Snipcom will laun
 
 ---
 
-## Development
-
-```bash
-# Syntax check a single file
-python3 -m py_compile src/snipcom_app/<file>.py
-
-# Verify all module imports (catches import-time errors)
-bash scripts/verify-imports.sh
-
-# Install and run CLI smoke tests
-bash scripts/install-local.sh
-scm --help
-scm -find __nonexistent_xyz__
-scm -f
-scm -w
-
-# Offscreen GUI smoke test
-timeout 8s env QT_QPA_PLATFORM=offscreen ~/.local/bin/snipcom
-```
-
 See `ARCHITECTURE.md` for a full map of the codebase.
 
 ---
