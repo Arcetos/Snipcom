@@ -28,11 +28,27 @@ if TYPE_CHECKING:
 
 
 class TerminalController(TerminalPollMixin, TerminalAIMixin):
+    _SESSION_CACHE_TTL = 0.4  # seconds
+
     def __init__(self, window: "NoteCopyPaster", *, terminal_suggestion_count: int) -> None:
         self.window = window
         self.terminal_suggestion_count = terminal_suggestion_count
         self._last_synced_ai_signature: tuple[str, tuple[str, ...], str] = ("", (), "")
         self._last_selector_signature: tuple[str, ...] = ()
+        self._session_cache: dict | None = None
+        self._session_cache_at: float = 0.0
+
+    def _get_current_session(self) -> dict | None:
+        now = time.monotonic()
+        if self._session_cache is not None and (now - self._session_cache_at) < self._SESSION_CACHE_TTL:
+            return self._session_cache
+        self._session_cache = self.window.current_linked_terminal_session()
+        self._session_cache_at = now
+        return self._session_cache
+
+    def invalidate_session_cache(self) -> None:
+        self._session_cache = None
+        self._session_cache_at = 0.0
 
     def _debug_enabled(self) -> bool:
         return (
@@ -175,6 +191,7 @@ class TerminalController(TerminalPollMixin, TerminalAIMixin):
     def select_linked_terminal(self, session_dir: Path) -> None:
         window = self.window
         window.current_linked_terminal_dir = session_dir
+        self.invalidate_session_cache()
         self._reset_terminal_poll_cache()
         self.clear_terminal_inline_ai_state()
         self.refresh_linked_terminal_toolbar()
@@ -324,31 +341,25 @@ class TerminalController(TerminalPollMixin, TerminalAIMixin):
         )
 
     def latest_terminal_cwd(self) -> str:
-        session = self.window.current_linked_terminal_session()
+        session = self._get_current_session()
         if session is None:
             return ""
         return read_linked_terminal_last_cwd(Path(session["runtime_dir"]))
 
     def latest_terminal_input(self) -> str:
-        window = self.window
-        session = window.current_linked_terminal_session()
+        session = self._get_current_session()
         if session is None:
             return ""
-        session_dir = Path(session["runtime_dir"])
-        return self._read_cached_last_command(session_dir)
+        return self._read_cached_last_command(Path(session["runtime_dir"]))
 
     def latest_terminal_output_quiet(self) -> str:
-        window = self.window
-        session = window.current_linked_terminal_session()
+        session = self._get_current_session()
         if session is None:
             return ""
-        session_dir = Path(session["runtime_dir"])
-        return self._read_cached_last_output(session_dir)
+        return self._read_cached_last_output(Path(session["runtime_dir"]))
 
     def current_linked_terminal_typed_text(self) -> str:
-        window = self.window
-        session = window.current_linked_terminal_session()
+        session = self._get_current_session()
         if session is None:
             return ""
-        session_dir = Path(session["runtime_dir"])
-        return self._read_cached_current_input(session_dir)
+        return self._read_cached_current_input(Path(session["runtime_dir"]))

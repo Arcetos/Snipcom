@@ -85,6 +85,16 @@ class UserCommandStore:
                 return
         raise KeyError(uid)
 
+    def set_tags(self, uid: str, tags: list[str]) -> None:
+        data = self._load()
+        for record in data["commands"]:
+            if record.get("id") == uid:
+                record["tags"] = tags
+                record["updated_at"] = utc_now_iso()
+                self._save(data)
+                return
+        raise KeyError(uid)
+
     def set_launch_options(self, uid: str, launch_options: dict) -> None:
         data = self._load()
         for record in data["commands"]:

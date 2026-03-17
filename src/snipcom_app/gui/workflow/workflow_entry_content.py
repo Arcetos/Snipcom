@@ -184,6 +184,8 @@ def read_file_text(window: "NoteCopyPaster", target: SnipcomEntry | Path | str, 
         QMessageBox.warning(window, "Missing entry", "This entry is no longer available.")
         return None
 
+    if entry.backend == "json_command":
+        return entry.body
     if entry.is_command:
         assert entry.command_id is not None
         try:
@@ -234,7 +236,9 @@ def write_entry_text(window: "NoteCopyPaster", target: SnipcomEntry | Path | str
         QMessageBox.warning(window, "Missing entry", "This entry is no longer available.")
         return False
     try:
-        if entry.is_command:
+        if entry.backend == "json_command":
+            window.repository.user_command_store.update(entry.source_ref, body=content)
+        elif entry.is_command:
             assert entry.command_id is not None
             window.repository.command_store.update_command(entry.command_id, body=content)
         elif entry.is_folder:

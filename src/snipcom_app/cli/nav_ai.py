@@ -114,7 +114,7 @@ def _clear_ai_state(ai_state: NavigatorAIState) -> None:
 
 def _refresh_ai_state(ctx: CliContext, buffer_text: str, ai_state: NavigatorAIState) -> None:
     nat_text = _natural_request_text(buffer_text)
-    request_text = nat_text if nat_text else buffer_text.strip()
+    request_text = nat_text
     if not request_text:
         if ai_state.request_text or ai_state.busy or ai_state.error_message or ai_state.candidates:
             _clear_ai_state(ai_state)
@@ -144,7 +144,7 @@ def _refresh_ai_state(ctx: CliContext, buffer_text: str, ai_state: NavigatorAISt
         generation_id = ai_state.generation_id
 
     def _worker() -> None:
-        candidates, error_message = _generate_cli_ai_candidates(ctx, request_text, n=5)
+        candidates, error_message = _generate_cli_ai_candidates(ctx, request_text, n=1)
         with ai_state.lock:
             if generation_id != ai_state.generation_id or ai_state.request_text.casefold() != request_text.casefold():
                 return

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QMessageBox
 
-from ...ai.ai import AIProviderError, AISuggestionContext, AISuggestionResult, check_ollama_status, deterministic_fallback_command, generate_ollama_command
+from ...ai.ai import AIProviderError, AISuggestionContext, AISuggestionResult, check_ollama_status, deterministic_fallback_command
 from ...ai.ai_shared import ai_anchor_terms, primary_tool_for_ai
 
 if TYPE_CHECKING:
@@ -180,47 +180,32 @@ class AiController:
     def generate_inline_ai_suggestion(
         self, user_request: str, *, include_terminal_context: bool = True
     ) -> tuple[AISuggestionResult | None, str]:
+        # Inline terminal suggestions are heuristic-only — no catalog scan, no AI call.
         window = self.window
-        if not window.ai_enabled():
-            return None, ""
-        connection_ok, connection_message = self.check_ai_connection()
-        if not connection_ok:
-            return None, connection_message
-        try:
-            context = self.build_ai_suggestion_context(user_request, include_terminal_context=include_terminal_context)
-        except (KeyError, OSError, ValueError) as exc:
-            return None, f"Could not build AI context: {exc}"
-        if not any(
-            (
-                context.user_request.strip(),
-                context.last_terminal_input.strip(),
-                context.last_terminal_output.strip(),
-                any(query.strip() for query in context.recent_searches),
-                any(command.strip() for command in context.related_commands),
-            )
-        ):
-            return None, "Not enough context yet."
-        if not context.user_request.strip():
-            fallback = deterministic_fallback_command(context)
-            if fallback:
-                return AISuggestionResult(
-                    command=fallback,
-                    provider="deterministic",
-                    model="",
-                    raw_text=fallback,
-                    used_context={"last_terminal_input": context.last_terminal_input},
-                    confidence_low=False,
-                ), ""
-        try:
-            suggestion = generate_ollama_command(
-                window.ai_endpoint(),
-                window.ai_model(),
-                context,
-                timeout=window.ai_timeout_seconds(),
-            )
-        except AIProviderError as exc:
-            return None, str(exc)
-        return suggestion, ""
+        last_input = window.terminal_controller.latest_terminal_input() if include_terminal_context else ""
+        last_output = window.terminal_controller.latest_terminal_output_quiet() if include_terminal_context else ""
+        cwd = window.terminal_controller.latest_terminal_cwd() if include_terminal_context else ""
+        context = AISuggestionContext(
+            user_request=user_request.strip(),
+            last_terminal_input=last_input,
+            last_terminal_output=last_output,
+            primary_tool="",
+            recent_searches=(),
+            related_commands=(),
+            current_directory=cwd,
+            directory_files=(),
+        )
+        fallback = deterministic_fallback_command(context)
+        if fallback:
+            return AISuggestionResult(
+                command=fallback,
+                provider="deterministic",
+                model="",
+                raw_text=fallback,
+                used_context={"last_terminal_input": last_input},
+                confidence_low=False,
+            ), ""
+        return None, ""
 
     def terminal_family_candidates(self, primary_tool: str) -> list[str]:
         candidates: list[str] = []
@@ -442,10 +427,8 @@ class AiController:
         last_output = window.terminal_controller.latest_terminal_output_quiet().strip()
         if not last_input:
             return []
-        primary_tool = self.primary_tool_for_ai(last_input, "")
         lowered = last_input.casefold()
         suggestions: list[str] = []
-        suggestions.extend(self.transition_based_terminal_suggestions(last_input))
 
         if lowered.startswith("git status"):
             suggestions.extend(self.git_status_based_suggestions(last_output))
@@ -491,15 +474,6 @@ class AiController:
         else:
             suggestions.extend(self.path_based_suggestions(last_input, last_output))
 
-        if len(suggestions) < 2:
-            for candidate in self.terminal_family_candidates(primary_tool):
-                if candidate.casefold() == lowered:
-                    continue
-                if candidate not in suggestions:
-                    suggestions.append(candidate)
-                if len(suggestions) >= 6:
-                    break
-
         unique_suggestions: list[str] = []
         seen: set[str] = set()
         for suggestion in suggestions:
@@ -517,18 +491,6 @@ class AiController:
         cleaned_prefix = typed_prefix.strip()
         if cleaned_prefix:
             filtered = [item for item in unique_suggestions if self.terminal_suggestion_matches_prefix(item, cleaned_prefix)]
-            if len(filtered) < self.terminal_suggestion_count:
-                prefix_seen = {item.casefold() for item in filtered}
-                for candidate in self.terminal_family_candidates(primary_tool):
-                    if not self.terminal_suggestion_matches_prefix(candidate, cleaned_prefix):
-                        continue
-                    lowered_candidate = candidate.casefold()
-                    if lowered_candidate in prefix_seen or lowered_candidate == lowered:
-                        continue
-                    filtered.append(candidate)
-                    prefix_seen.add(lowered_candidate)
-                    if len(filtered) >= self.terminal_suggestion_count:
-                        break
             return filtered[: self.terminal_suggestion_count]
         return unique_suggestions[: self.terminal_suggestion_count]
 

@@ -83,19 +83,20 @@ class TerminalAIMixin:
         window.terminal_inline_ai_busy = False
         window.terminal_ai_suggestion_label.hide()
         window.hide_terminal_ai_overlay()
-        session = window.current_linked_terminal_session()
-        if session is not None:
-            try:
-                clear_linked_terminal_ai_suggestions(Path(session["runtime_dir"]))
-            except OSError:
-                pass
-        self._last_synced_ai_signature = ("", (), "")
+        if self._last_synced_ai_signature != ("", (), ""):
+            session = window.current_linked_terminal_session()
+            if session is not None:
+                try:
+                    clear_linked_terminal_ai_suggestions(Path(session["runtime_dir"]))
+                except OSError:
+                    pass
+            self._last_synced_ai_signature = ("", (), "")
 
     def sync_linked_terminal_ai_suggestions(
         self, *, request_text: str = "", suggestions: list[str] | None = None
     ) -> None:
         window = self.window
-        session = window.current_linked_terminal_session()
+        session = self._get_current_session()
         if session is None:
             return
         session_dir = Path(session["runtime_dir"])
@@ -273,8 +274,6 @@ class TerminalAIMixin:
         latest_input = self.latest_terminal_input().strip()
         latest_output = self.latest_terminal_output_quiet().strip()
         signature = (latest_input, latest_output, typed_text)
-        if latest_input:
-            self.observe_direct_terminal_command(latest_input)
         if signature == window.terminal_passive_signature and window.terminal_passive_suggestions:
             return
         window.terminal_passive_signature = signature

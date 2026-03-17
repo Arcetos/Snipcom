@@ -129,6 +129,7 @@ def build_generation_prompt_multi(context: AISuggestionContext, n: int = 3) -> s
         "Example:  rpm -qa ## lists all installed RPM packages with name and version",
         "Rules: no markdown, no code fences, no line numbers, no placeholders like <name>.",
         "Pipelines (|) and sequences (&&, ;) are fine inside the command part.",
+        "If the task requires multiple steps, combine them into one compound command on a single line.",
         "Keep descriptions under 10 words. One line per command, nothing else.",
     ]
     if n > 1:

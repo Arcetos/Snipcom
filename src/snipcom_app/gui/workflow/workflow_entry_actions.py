@@ -56,6 +56,11 @@ def rename_file(window: "NoteCopyPaster", target: SnipcomEntry | Path | str) -> 
         window.show_status(f"Renamed {entry.display_name} to {renamed_folder.name}.")
         return
 
+    if entry.backend == "json_command":
+        window.repository.user_command_store.update(entry.source_ref, title=new_name)
+        window.refresh_table()
+        window.show_status(f"Renamed {entry.display_name} to {new_name}.")
+        return
     if entry.is_command:
         assert entry.command_id is not None
         if window.repository.command_store.title_exists(new_name, exclude_id=entry.command_id):

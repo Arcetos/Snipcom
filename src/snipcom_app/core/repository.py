@@ -426,7 +426,7 @@ class SnipcomRepository(RepositoryMetadataMixin):
             name=d["title"],
             display_name=d["title"],
             snip_type="family_command",
-            tag_text="",
+            tag_text=join_tags(d.get("tags", [])),
             size_bytes=len(d["body"].encode("utf-8")),
             modified_timestamp=self.iso_timestamp(d.get("updated_at", "")),
             dangerous=False,

@@ -179,6 +179,9 @@ class MainWindowEntryMixin:
         if has_tag(current_tags, FAVORITES_TAG) and not has_tag(cleaned_tags, FAVORITES_TAG):
             cleaned_tags.append(FAVORITES_TAG)
         cleaned_tag = join_tags(cleaned_tags)
+        if entry.backend == "json_command":
+            self.repository.user_command_store.set_tags(entry.source_ref, split_tags(cleaned_tag))
+            return
         if entry.is_command:
             assert entry.command_id is not None
             self.repository.command_store.update_command(entry.command_id, tags=split_tags(cleaned_tag))
@@ -253,6 +256,9 @@ class MainWindowEntryMixin:
         if not has_tag(existing_tags, FAVORITES_TAG):
             return False
         updated_tags = [tag for tag in existing_tags if tag.strip().casefold() != FAVORITES_TAG]
+        if entry.backend == "json_command":
+            self.repository.user_command_store.set_tags(entry.source_ref, updated_tags)
+            return True
         if entry.is_command:
             assert entry.command_id is not None
             self.repository.command_store.update_command(entry.command_id, tags=updated_tags)
